@@ -365,7 +365,7 @@ def refreshAll():
     progress = 'Getting items'
     # print(progress)
     checkItemArray = [1]
-    while len(checkItemArray) is not 0:
+    while len(checkItemArray) != 0:
 
         c.execute("SELECT max(id) FROM items;")
         since_id = str(c.fetchone()[0])
