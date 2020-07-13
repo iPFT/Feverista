@@ -82,9 +82,10 @@ item_sort_direction = 'ASC'  # DESC ASC
 # what to call and where to store the database
 fvr_db = 'fvr.db'
 
-# ******** End of User Credentials ******** #
-
-timestamp = int(time.time())
+global selected_group
+global selected_feed
+selected_group = '%'
+selected_feed = '%'
 
 
 def createDb():
@@ -627,15 +628,27 @@ def openLink(url):
 
 def markAsRead(mark, id):
     conn = sqlite3.connect(fvr_db)
+    conn.row_factory = sqlite3.Row
     c = conn.cursor()
+    c.execute("SELECT last_refreshed_on_time FROM last_refreshed_on_time;")
+    row = c.fetchone()
+
+    if row[0] != 0:
+        last_refreshed_on_time = row[0]
+    else:
+        last_refreshed_on_time = int(time.time())
 
     if mark == 'item':
         payload = {'api_key': api_key, 'mark': mark, 'as': 'read', 'id': id}
         c.execute('UPDATE items SET is_read = 1 WHERE id = ?', (id,))
     elif mark == 'group':
         payload = {'api_key': api_key, 'mark': mark,
-                   'as': 'read', 'id': id, 'before': timestamp}
+                   'as': 'read', 'id': id, 'before': last_refreshed_on_time}
         c.execute('UPDATE items SET is_read = 1 WHERE id in (SELECT items.id FROM items LEFT OUTER JOIN feeds ON items.feed_id = feeds.id LEFT OUTER JOIN feeds_group ON feeds.id = feeds_group.feed_id LEFT OUTER JOIN groups ON feeds_group.group_id = groups.id WHERE items.is_read = 0 and feeds.is_spark = 0 and feeds_group.group_id =?)', (id,))
+    elif mark == 'feed':
+        payload = {'api_key': api_key, 'mark': mark,
+                   'as': 'read', 'id': id, 'before': last_refreshed_on_time}
+        c.execute('UPDATE items SET is_read = 1 WHERE id in (SELECT items.id FROM items LEFT OUTER JOIN feeds ON items.feed_id = feeds.id LEFT OUTER JOIN feeds_group ON feeds.id = feeds_group.feed_id LEFT OUTER JOIN groups ON feeds_group.group_id = groups.id WHERE items.is_read = 0 and feeds.is_spark = 0 and feeds_group.feed_id =?)', (id,))
 
     r = requests.post(baseurl, payload)
     conn.commit()
@@ -646,17 +659,21 @@ def sync_action(sender):
 
 
 def feed_action(fd):
-    print('feed')
+    if selected_feed != '%':
+        #print('mark feed ' + selected_feed + ' as read')
+        markAsRead('feed', selected_feed)
 
 
 def group_action(grp):
-    print('group')
+    if selected_group != '%':
+        #print('mark group ' + selected_group + ' as read')
+        markAsRead('group', selected_group)
 
 
 def segment_action(sender):
-    seg_name = sender.segments[sender.selected_index]
-    print(seg_name + ' has been selected')
-    view_type = seg_name
+    global view_type
+    view_type = sender.segments[sender.selected_index]
+    print(view_type + ' has been selected')
 
 
 class MyTableView(object):
@@ -701,6 +718,12 @@ class MyTableView(object):
         tv.title = view_type + ' ' + str(self.list[row]['title'])
         tv.group_id = str(self.list[row]['group_id'])
         tv.feed_id = str(self.list[row]['feed_id'])
+
+        global selected_group
+        global selected_feed
+        selected_group = tv.group_id
+        selected_feed = tv.feed_id
+
         item_ds = ItemTableView(tv.group_id, tv.feed_id)
         tv.data_source = item_ds
         tv.delegate = item_ds
@@ -752,6 +775,12 @@ class SubTableView(object):
         tv.title = view_type + ' ' + str(self.feeds[row]['title'])
         tv.group_id = str(self.feeds[row]['group_id'])
         tv.feed_id = str(self.feeds[row]['feed_id'])
+
+        global selected_group
+        global selected_feed
+        selected_group = tv.group_id
+        selected_feed = tv.feed_id
+
         item_ds = ItemTableView(tv.group_id, tv.feed_id)
         tv.data_source = item_ds
         tv.delegate = item_ds
